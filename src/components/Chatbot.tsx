@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { sendChatMessage, type ChatMessage } from '../api/chat';
+import { sendChatMessageStream, type ChatMessage } from '../api/chat';
 
 const INITIAL_MESSAGE: ChatMessage = {
   id: 'welcome-msg',
@@ -24,7 +24,7 @@ export const Chatbot: React.FC = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // 새 메시지 시 자동 스크롤
+  // 새 메시지 및 스트리밍 시 자동 스크롤
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading]);
@@ -46,25 +46,41 @@ export const Chatbot: React.FC = () => {
     setMessages(newMessages);
     setInput('');
 
+    // 스트리밍 시작 전: 기존의 답변 생성 중 로딩 표시 노출
     setIsLoading(true);
 
     try {
-      // API 요청 메시지 포맷 변환 (role, content)
       const apiPayload = newMessages.map((m) => ({
         role: m.role,
         content: m.content,
       }));
 
-      const reply = await sendChatMessage(apiPayload);
+      const assistantMsgId = (Date.now() + 1).toString();
+      let isFirstChunk = true;
 
-      const assistantMessage: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: reply,
-        createdAt: new Date(),
-      };
-
-      setMessages((prev) => [...prev, assistantMessage]);
+      await sendChatMessageStream(apiPayload, (delta) => {
+        if (isFirstChunk) {
+          isFirstChunk = false;
+          // 첫 번째 텍스트 조각이 도착하면 로딩 인디케이터를 끄고 어시스턴트 메시지 버블을 생성
+          setIsLoading(false);
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: assistantMsgId,
+              role: 'assistant',
+              content: delta,
+              createdAt: new Date(),
+            },
+          ]);
+        } else {
+          // 이후 청크들을 기존 어시스턴트 메시지 내용에 실시간 누적
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === assistantMsgId ? { ...msg, content: msg.content + delta } : msg,
+            ),
+          );
+        }
+      });
     } catch (err) {
       const errorStr = err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다.';
       setErrorMessage(errorStr);
@@ -155,7 +171,7 @@ export const Chatbot: React.FC = () => {
           );
         })}
 
-        {/* 로딩 인디케이터 */}
+        {/* 로딩 인디케이터 (첫 청크 수신 전까지 노출) */}
         {isLoading && (
           <div className="message-row assistant-row">
             <div className="message-avatar">🤖</div>
@@ -213,4 +229,3 @@ export const Chatbot: React.FC = () => {
   );
 };
 export default Chatbot;
-

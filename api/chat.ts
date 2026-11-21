@@ -52,58 +52,59 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   }
 
-  try {
     const { messages } = (req.body || {}) as { messages?: IncomingChatMessage[] };
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return res.status(400).json({ error: '전송할 메시지(messages) 배열이 필요합니다.' });
     }
 
-    const openai = new OpenAI({ apiKey });
+    try {
+      const openai = new OpenAI({ apiKey });
 
-    // OpenAI Responses API의 input 규격에 맞게 변환
-    const inputItems = messages.map((msg) => ({
-      role: msg.role === 'assistant' ? ('assistant' as const) : ('user' as const),
-      content: msg.content,
-    }));
+      // OpenAI Responses API의 input 규격에 맞게 변환
+      const inputItems = messages.map((msg) => ({
+        role: msg.role === 'assistant' ? ('assistant' as const) : ('user' as const),
+        content: msg.content,
+      }));
 
-    // OpenAI Responses API 호출 (gpt-6-luna 모델 및 reasoning.effort 'none' 설정)
-    const response = await openai.responses.create({
-      model: 'gpt-6-luna',
-      reasoning: {
-        effort: 'none',
-      },
-      instructions: SYSTEM_PROMPT,
-      input: inputItems,
-    });
+        // OpenAI Responses API 스트리밍 호출 (gpt-6-luna 모델 및 reasoning.effort 'none' 설정)
+        const stream = await openai.responses.create({
+          model: 'gpt-6-luna',
+          reasoning: {
+            effort: 'none',
+          },
+          instructions: SYSTEM_PROMPT,
+          input: inputItems,
+          stream: true,
+        });
 
-    // Responses API 응답에서 텍스트 추출
-    let replyText = response.output_text || '';
+        // Server-Sent Events (SSE) 스트리밍 응답 헤더 설정
+        res.writeHead(200, {
+          'Content-Type': 'text/event-stream; charset=utf-8',
+          'Cache-Control': 'no-cache, no-transform',
+          'Connection': 'keep-alive',
+          'X-Accel-Buffering': 'no',
+        });
 
-    // 만약 output_text가 비어 있다면 output 배열에서 메시지 텍스트 탐색
-    if (!replyText && Array.isArray(response.output)) {
-      for (const item of response.output) {
-        if (item.type === 'message' && Array.isArray(item.content)) {
-          for (const c of item.content) {
-            if (c.type === 'output_text' && c.text) {
-              replyText += c.text;
+            for await (const event of stream) {
+              if (event.type === 'response.output_text.delta' && event.delta) {
+                res.write(`data: ${JSON.stringify({ text: event.delta })}\n\n`);
+              }
+            }
+
+            res.write('data: [DONE]\n\n');
+            res.end();
+          } catch (error: unknown) {
+            console.error('OpenAI Responses API Error:', error);
+            const errorMessage = error instanceof Error ? error.message : '서버 내부 오류가 발생했습니다.';
+
+            if (res.headersSent) {
+              res.write(`data: ${JSON.stringify({ error: errorMessage })}\n\n`);
+              res.end();
+            } else {
+              return res.status(500).json({
+                error: `OpenAI API 호출 중 오류가 발생했습니다: ${errorMessage}`,
+              });
             }
           }
-        }
-      }
     }
-
-    if (!replyText) {
-      replyText = '답변을 생성하지 못했습니다. 다시 시도해주세요.';
-    }
-
-    return res.status(200).json({ reply: replyText });
-  } catch (error: unknown) {
-    console.error('OpenAI Responses API Error:', error);
-    const errorMessage = error instanceof Error ? error.message : '서버 내부 오류가 발생했습니다.';
-    return res.status(500).json({
-      error: `OpenAI API 호출 중 오류가 발생했습니다: ${errorMessage}`,
-    });
-  }
-}
-
