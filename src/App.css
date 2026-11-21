@@ -171,6 +171,26 @@
   cursor: not-allowed;
 }
 
+.suggestion-chip.difficulty-chip {
+  border-color: #93c5fd;
+  color: #1d4ed8;
+  font-weight: 600;
+  background-color: #f0f7ff;
+}
+
+.suggestion-chip.back-chip {
+  border-style: dashed;
+  color: #64748b;
+  font-size: 12px;
+  background-color: transparent;
+}
+
+.suggestion-chip.back-chip:hover:not(:disabled) {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #334155;
+}
+
 @media (prefers-color-scheme: dark) {
   .suggestion-chip {
     background: #252837;
@@ -181,6 +201,19 @@
     background: #1e3a8a;
     border-color: #3b82f6;
     color: #ffffff;
+  }
+  .suggestion-chip.difficulty-chip {
+    background-color: #1e293b;
+    border-color: #3b82f6;
+    color: #60a5fa;
+  }
+  .suggestion-chip.back-chip {
+    color: #94a3b8;
+  }
+  .suggestion-chip.back-chip:hover:not(:disabled) {
+    background: #2d3142;
+    border-color: #475569;
+    color: #f1f5f9;
   }
 }
 

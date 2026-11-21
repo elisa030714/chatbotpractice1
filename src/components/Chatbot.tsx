@@ -4,20 +4,27 @@ import { sendChatMessageStream, type ChatMessage } from '../api/chat';
 const INITIAL_MESSAGE: ChatMessage = {
   id: 'welcome-msg',
   role: 'assistant',
-  content: `안녕하세요! 🎓 **영어 단어 퀴즈 챗봇**입니다.\n\n원하시는 **주제**(예: 여행, 비즈니스, 일상 등)나 **난이도**(초급, 중급, 고급)를 알려주시면, 알맞은 영어 단어 3개와 함께 짧은 복습 퀴즈를 내드릴게요!\n\n어떤 주제나 난이도로 공부해 볼까요?`,
+  content: `안녕하세요! 🎓 **영어 단어 퀴즈 챗봇**입니다.\n\n원하시는 **주제**(예: 여행, 비즈니스, 일상 등)나 **난이도**(초급, 중급, 고급)를 알려주시면, 알맞은 영어 단어 3개와 함께 짧은 복습 퀴즈를 내드릴게요!\n\n아래의 추천 버튼을 순서대로 선택하시거나 직접 입력해 보세요.`,
   createdAt: new Date(),
 };
 
-const SUGGESTED_TOPICS = [
-  { label: '✈️ 초급 여행 영어', prompt: '초급 난이도로 공항이나 여행에서 쓰는 필수 영어 단어를 알려줘.' },
-  { label: '💼 중급 비즈니스', prompt: '중급 난이도로 비즈니스 미팅에서 유용한 영어 단어를 알려줘.' },
-  { label: '☕ 일상 카페 회화', prompt: '초중급 일상생활이나 카페에서 자주 쓰는 영어 단어를 알려줘.' },
-  { label: '📚 토익 필수 단어', prompt: '토익 시험에 자주 나오는 중고급 단어를 알려줘.' },
+const TOPIC_OPTIONS = [
+  { id: 'daily', label: '☕ 일상 회화', value: '일상 회화' },
+  { id: 'business', label: '💼 비즈니스 영어', value: '비즈니스 영어' },
+  { id: 'travel', label: '✈️ 공항/여행 영어', value: '공항/여행 영어' },
+  { id: 'exam', label: '📚 토익/수능 필수 단어', value: '토익/수능 필수 단어' },
+];
+
+const DIFFICULTY_OPTIONS = [
+  { id: 'beginner', label: '🌱 초급', value: '초급' },
+  { id: 'intermediate', label: '🌿 중급', value: '중급' },
+  { id: 'advanced', label: '🌳 고급', value: '고급' },
 ];
 
 export const Chatbot: React.FC = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([INITIAL_MESSAGE]);
   const [input, setInput] = useState('');
+  const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -45,6 +52,7 @@ export const Chatbot: React.FC = () => {
     const newMessages = [...messages, userMessage];
     setMessages(newMessages);
     setInput('');
+    setSelectedTopic(null);
 
     // 스트리밍 시작 전: 기존의 답변 생성 중 로딩 표시 노출
     setIsLoading(true);
@@ -92,6 +100,16 @@ export const Chatbot: React.FC = () => {
     }
   };
 
+  const handleSelectTopic = (topicValue: string) => {
+    setSelectedTopic(topicValue);
+  };
+
+  const handleSelectDifficulty = (difficultyValue: string) => {
+    if (!selectedTopic) return;
+    const formattedPrompt = `주제: ${selectedTopic}\n난이도: ${difficultyValue}\n위 조건에 맞는 영어 단어 퀴즈를 시작해줘.`;
+    handleSendMessage(formattedPrompt);
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -106,6 +124,7 @@ export const Chatbot: React.FC = () => {
         createdAt: new Date(),
       },
     ]);
+    setSelectedTopic(null);
     setErrorMessage(null);
     setInput('');
   };
@@ -131,21 +150,52 @@ export const Chatbot: React.FC = () => {
         </button>
       </header>
 
-      {/* 추천 주제 칩 목록 */}
+      {/* 추천 버튼 영역 (1단계: 주제 선택 -> 2단계: 난이도 선택) */}
       {messages.length <= 2 && (
         <div className="chatbot-suggestions">
-          <span className="suggestions-label">추천 주제:</span>
-          {SUGGESTED_TOPICS.map((topic) => (
-            <button
-              key={topic.label}
-              type="button"
-              className="suggestion-chip"
-              disabled={isLoading}
-              onClick={() => handleSendMessage(topic.prompt)}
-            >
-              {topic.label}
-            </button>
-          ))}
+          {!selectedTopic ? (
+            <>
+              <span className="suggestions-label">1️⃣ 주제 선택:</span>
+              {TOPIC_OPTIONS.map((topic) => (
+                <button
+                  key={topic.id}
+                  type="button"
+                  className="suggestion-chip"
+                  disabled={isLoading}
+                  onClick={() => handleSelectTopic(topic.value)}
+                >
+                  {topic.label}
+                </button>
+              ))}
+            </>
+          ) : (
+            <>
+              <span className="suggestions-label">
+                선택한 주제: <strong>{selectedTopic}</strong>
+              </span>
+              <span className="suggestions-label">2️⃣ 난이도 선택:</span>
+              {DIFFICULTY_OPTIONS.map((diff) => (
+                <button
+                  key={diff.id}
+                  type="button"
+                  className="suggestion-chip difficulty-chip"
+                  disabled={isLoading}
+                  onClick={() => handleSelectDifficulty(diff.value)}
+                >
+                  {diff.label}
+                </button>
+              ))}
+              <button
+                type="button"
+                className="suggestion-chip back-chip"
+                disabled={isLoading}
+                onClick={() => setSelectedTopic(null)}
+                title="주제 다시 선택"
+              >
+                ↩ 다른 주제 선택
+              </button>
+            </>
+          )}
         </div>
       )}
 
@@ -198,7 +248,7 @@ export const Chatbot: React.FC = () => {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* 입력창 */}
+      {/* 입력창 (직접 입력 기능 유지) */}
       <form
         className="chatbot-input-form"
         onSubmit={(e) => {
